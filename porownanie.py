@@ -1,5 +1,5 @@
 import numpy as np
-from ADASYN import ADASYN
+from ADASYN import adasyn
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
 from imblearn.over_sampling import RandomOverSampler, SMOTE
@@ -16,7 +16,7 @@ clf = DecisionTreeClassifier(random_state=997)
 
 preprocs = {
     'none': None,
-    'ADASYN': ADASYN(random_state = 997),
+    'ADASYN': adasyn(),
     'SMOTE' : SMOTE(random_state=997),
     'ROS': RandomOverSampler(random_state = 997),
     'RUS': RandomUnderSampler(random_state = 997)

@@ -1,104 +1,125 @@
+
 import numpy as np
-from scipy import sparse
-from sklearn.utils import check_random_state, safe_indexing
-from imblearn.over_sampling.base import BaseOverSampler
-from imblearn.utils import check_neighbors_object
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn import neighbors
+from sklearn import datasets
 
-class ADASYN(BaseOverSampler):
+seed = 997
+np.random.seed(seed)
 
-    def __init__(self,
-                 sampling_strategy='auto',
-                 random_state=None,
-                 n_neighbors=5,
-                 n_jobs=1):
+class adasyn():
 
-        super().__init__(sampling_strategy=sampling_strategy)
-        self.random_state = random_state
-        self.n_neighbors = n_neighbors
-        self.n_jobs = n_jobs
-
-    def _validate_estimator(self):
-        self.nn_ = check_neighbors_object('n_neighbors', self.n_neighbors, additional_neighbor=1)
-        self.nn_.set_params(**{'n_jobs': self.n_jobs})
-
-    def _fit_resample(self, X, y):
-        self._validate_estimator()
-        random_state = check_random_state(self.random_state)
-
-        X_resampled = X.copy()
-        y_resampled = y.copy()
-
-        for class_sample, n_samples in self.sampling_strategy_.items():
-            if n_samples == 0:
-                continue
-            target_class_indices = np.flatnonzero(y == class_sample)
-            X_class = safe_indexing(X, target_class_indices)
-
-            self.nn_.fit(X)
-            _, nn_index = self.nn_.kneighbors(X_class)
-            ratio_nn = (np.sum(y[nn_index[:, 1:]] != class_sample, axis=1) /
-                        (self.nn_.n_neighbors - 1))
-            if not np.sum(ratio_nn):
-                raise RuntimeError('Not any neighbours belong to the majority'
-                                   ' class. This case will induce a NaN case'
-                                   ' with a division by zero. ADASYN is not'
-                                   ' suited for this specific dataset.'
-                                   ' Use SMOTE instead.')
-            ratio_nn /= np.sum(ratio_nn)
-            n_samples_generate = np.rint(ratio_nn * n_samples).astype(int)
-            if not np.sum(n_samples_generate):
-                raise ValueError("No samples will be generated with the"
-                                 " provided ratio settings.")
-
-            self.nn_.fit(X_class)
-            _, nn_index = self.nn_.kneighbors(X_class)
-
-            if sparse.issparse(X):
-                row_indices, col_indices, samples = [], [], []
-                n_samples_generated = 0
-                for x_i, x_i_nn, num_sample_i in zip(X_class, nn_index,
-                                                     n_samples_generate):
-                    if num_sample_i == 0:
-                        continue
-                    nn_zs = random_state.randint(
-                        1, high=self.nn_.n_neighbors, size=num_sample_i)
-                    steps = random_state.uniform(size=len(nn_zs))
-                    if x_i.nnz:
-                        for step, nn_z in zip(steps, nn_zs):
-                            sample = (x_i + step *
-                                      (X_class[x_i_nn[nn_z], :] - x_i))
-                            row_indices += (
-                                    [n_samples_generated] * len(sample.indices))
-                            col_indices += sample.indices.tolist()
-                            samples += sample.data.tolist()
-                            n_samples_generated += 1
-                X_new = (sparse.csr_matrix(
-                    (samples, (row_indices, col_indices)),
-                    [np.sum(n_samples_generate), X.shape[1]], dtype=X.dtype))
-                y_new = np.array([class_sample] * np.sum(n_samples_generate),
-                                 dtype=y.dtype)
-            else:
-                x_class_gen = []
-                for x_i, x_i_nn, num_sample_i in zip(X_class, nn_index,
-                                                     n_samples_generate):
-                    if num_sample_i == 0:
-                        continue
-                    nn_zs = random_state.randint(
-                        1, high=self.nn_.n_neighbors, size=num_sample_i)
-                    steps = random_state.uniform(size=len(nn_zs))
-                    x_class_gen.append([
-                        x_i + step * (X_class[x_i_nn[nn_z], :] - x_i)
-                        for step, nn_z in zip(steps, nn_zs)
-                    ])
-
-                X_new = np.concatenate(x_class_gen).astype(X.dtype)
-                y_new = np.array([class_sample] * np.sum(n_samples_generate),
-                                 dtype=y.dtype)
-
-            if sparse.issparse(X_new):
-                X_resampled = sparse.vstack([X_resampled, X_new])
-            else:
-                X_resampled = np.vstack((X_resampled, X_new))
-            y_resampled = np.hstack((y_resampled, y_new))
-
+    """
+    Adaptively generating minority data samples according to their distributions.
+    More synthetic data is generated for minority class samples that are harder to learn.
+    Harder to learn data is defined as positive examples with not many examples for in their respective neighbourhood.
+    Inputs
+         -----
+         X:  Input features, X, sorted by the minority examples on top.  Minority example should also be labeled as 1
+         y:  Labels, with minority example labeled as 1
+      beta:  Degree of imbalance desired.  Neg:Pos. A 1 means the positive and negative examples are perfectly balanced.
+         K:  Amount of neighbours to look at
+ threshold:  Amount of imbalance rebalance required for algorithm
+    Variables
+         -----
+         xi:  Minority example
+        xzi:  A minority example inside the neighbourhood of xi
+         ms:  Amount of data in minority class
+         ml:  Amount of data in majority class
+        clf:  k-NN classifier model
+          d:  Ratio of minority : majority
+       beta:  Degree of imbalance desired
+          G:  Amount of data to generate
+         Ri:  Ratio of majority data / neighbourhood size.  Larger ratio means the neighbourhood is harder to learn,
+              thus generating more data.
+     Minority_per_xi:  All the minority data's index by neighbourhood
+     Rhat_i:  Normalized Ri, where sum = 1
+         Gi:  Amount of data to generate per neighbourhood (indexed by neighbourhoods corresponding to xi)
+    Returns
+         -----
+  syn_data:  New synthetic minority data created
+    """
+    def fit_resample(self, X, y, beta = 1, K = 5, threshold = 1):
+        ms = int(sum(y))
+        ml = len(y) - ms
+        clf = neighbors.KNeighborsClassifier()
+        clf.fit(X, y)
+        d = np.divide(ms, ml)
+        if d > threshold:
+            return print("The data set is not imbalanced enough.")
+        G = (ml - ms) * beta
+        Ri = []
+        Minority_per_xi = []
+        Minority_index = []
+        for i in range(len(y)):
+            if y[i] == 1:
+                Minority_index.append(i)
+        for i in range(len(y)):
+            if y[i] == 1:
+                xi = X[i, :].reshape(1,-1)
+                neighbours = clf.kneighbors(xi, n_neighbors=K+1, return_distance=False)[0]
+                neighbours = neighbours[1:]
+                count = 0
+                for value in neighbours:
+                    if not value in Minority_index:
+                        count += 1
+                minority = []
+                for value in neighbours:
+                    if value in Minority_index:
+                        minority.append(value)
+                Minority_per_xi.append(minority)
+                Ri.append(count / K)
+        Rhat_i = []
+        for ri in Ri:
+            rhat_i = ri / sum(Ri)
+            Rhat_i.append(rhat_i)
+        Gi = []
+        for rhat_i in Rhat_i:
+            gi = round(rhat_i * G)
+            Gi.append(int(gi))
+        syn_data = []
+        flag = 0
+        for i in range(len(y)):
+            if y[i] == 1:
+                xi = X[i, :].reshape(1,-1)
+                for j in range(Gi[flag]):
+                    if Minority_per_xi[flag]:
+                        index = np.random.choice(Minority_per_xi[flag])
+                        xzi = X[index, :].reshape(1, -1)
+                        si = xi + (xzi - xi) * np.random.uniform(0, 1)
+                        syn_data.append(si)
+                    else:
+                        syn_data.append(xi)
+                flag+=1;
+        data = []
+        print(Ri)
+        print(Gi)
+        print(Minority_index)
+        print(Minority_per_xi)
+        labels = []
+        for values in syn_data:
+            data.append(values[0])
+        #print("{} amount of minority class samples generated".format(len(data)))
+        labels2 = np.ones([len(data), 1])
+        labels = np.concatenate([labels2,y.reshape(-1, 1)])
+        data = np.concatenate([data, X])
+        adasyn_data = np.concatenate([data,labels], axis=1)
+        X_resampled = adasyn_data[:, :-1]
+        y_resampled = adasyn_data[:, -1].astype(int)
+        #plt.figure(figsize=(10,10))
+        #plt.scatter(X_resampled[:,0], X_resampled[:,1], c=y_resampled, cmap='bwr')
+        #plt.tight_layout()
+        #plt.savefig('po.png')
+        #np.savetxt("adasyn.csv", adasyn_data, delimiter=",",fmt=["%.4f" for i in range(X.shape[1])] + ["%i"],)
         return X_resampled, y_resampled
+
+#dataset = 'yeast4'
+#dataset = np.genfromtxt("datasets/%s.csv" % (dataset), delimiter=",")
+#X = dataset[:, :-1]
+#y = dataset[:, -1].astype(int)
+#plt.figure(figsize=(10,10))
+#plt.scatter(X[:,0], X[:,1], c=y, cmap='bwr')
+#plt.tight_layout()
+#plt.savefig('przed.png')
+#adasyn(X,y,1,5)
