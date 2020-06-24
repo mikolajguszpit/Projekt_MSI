@@ -30,7 +30,6 @@ n_repeats = 2
 rskf = RepeatedStratifiedKFold(n_splits=n_splits, n_repeats=n_repeats, random_state=997)
 
 scores = np.zeros((len(preprocs),n_splits * n_repeats))
-print(scores.shape)
 
 for fold_id, (train, test) in enumerate(rskf.split(X,y)):
     for preproc_id, preproc in enumerate(preprocs):
@@ -46,37 +45,29 @@ for fold_id, (train, test) in enumerate(rskf.split(X,y)):
         scores[preproc_id, fold_id] = balanced_accuracy_score(y[test], y_pred)
 
 mean_scores = np.mean(scores, axis=1).T
-
-print(mean_scores)
-
-ranks = []
-for ms in mean_scores:
-    ranks.append(rankdata(ms).tolist())
-ranks = np.array(ranks)
-
-print(ranks.shape)
-print(ranks)
+print("\n Accuracy score")
+print("\nUśrednionie wyniki\n", mean_scores)
 
 alfa = .05
-w_statistic = np.zeros((len(preprocs), len(preprocs)))
+t_statistic = np.zeros((len(preprocs), len(preprocs)))
 p_value = np.zeros((len(preprocs), len(preprocs)))
 
 for i in range(len(preprocs)):
     for j in range(len(preprocs)):
-        w_statistic[i, j], p_value[i, j] = ranksums(ranks.T[i], ranks.T[j])
+        t_statistic[i, j], p_value[i, j] = ttest_ind(scores[i], scores[j])
 
 headers = list(preprocs.keys())
 names_column = np.expand_dims(np.array(list(preprocs.keys())), axis=1)
 
-w_statistic_table = np.concatenate((names_column, w_statistic), axis=1)
-w_statistic_table = tabulate(w_statistic_table, headers, floatfmt=".2f")
+t_statistic_table = np.concatenate((names_column, t_statistic), axis=1)
+t_statistic_table = tabulate(t_statistic_table, headers, floatfmt=".2f")
 
 p_value_table = np.concatenate((names_column, p_value), axis=1)
 p_value_table = tabulate(p_value_table, headers, floatfmt=".2f")
-print("\nw-statistic:\n", w_statistic_table, "\n\np-value:\n", p_value_table)
+print("\nt-statistic:\n", t_statistic_table, "\n\np-value:\n", p_value_table)
 
 advantage = np.zeros((len(preprocs), len(preprocs)))
-advantage[w_statistic > 0] = 1
+advantage[t_statistic > 0] = 1
 advantage_table = tabulate(np.concatenate(
     (names_column, advantage), axis=1), headers)
 print("\nTabela przewagi:\n", advantage_table)
@@ -87,43 +78,9 @@ significance_table = tabulate(np.concatenate(
     (names_column, significance), axis=1), headers)
 print("\nMacierz istotności:\n", significance_table)
 
-names_column1 = np.expand_dims(np.array(list(labels.keys())), axis=1)
-scores_M = np.concatenate((names_column1, mean_scores), axis=1)
-scores_M = tabulate(scores_M, headers, tablefmt="2f")
-
 sign_better = significance * advantage
 sign_better_table = tabulate(np.concatenate(
     (names_column, sign_better), axis=1), headers)
 
-t_statistic = np.zeros((len(preprocs), len(preprocs)))
-p_value1 = np.zeros((len(preprocs), len(preprocs)))
+print('\nStatystycznie znacząco lepszy:\n', sign_better_table)
 
-mean_ranks_table = tabulate((headers, mean_ranks))
-
-print("\n Accuracy score")
-print("\nUśrednionie wyniki\n", scores_M)
-print("\nUśrednione rangi\n", mean_ranks_table)
-
-data_name = list(labels.keys())
-
-
-for i in range(len(preprocs)):
-    for j in range(len(preprocs)):
-        t_statistic[i, j], p_value1[i, j] = ttest_ind(scores_label[i], scores_label[j])
-
-advantage1 = np.zeros((len(preprocs), len(preprocs)))
-advantage1[t_statistic > 0] = 1
-advantage1_table = tabulate(np.concatenate(
-    (names_column, advantage1), axis=1), headers)
-
-significance1 = np.zeros((len(preprocs), len(preprocs)))
-significance1[p_value1 <= alfa] = 1
-significance1_table = tabulate(np.concatenate(
-    (names_column, significance1), axis=1), headers)
-
-sign_better1 = significance1 * advantage1
-sign_better_table1 = tabulate(np.concatenate(
-    (names_column, sign_better1), axis=1), headers)
-
-print("\n Statystycznie znacząco lepszy ("+data_name[label]+"):\n", sign_better_table1)
-print("\n")
