@@ -31,17 +31,6 @@ metrics = {
     'g-mean': geometric_mean_score_1,
 }
 
-yolo ={
-    'yeast4':None,
-    'vowel0':None,
-    'shuttle-c2-vs-c4':None,
-    'glass5':None,
-    'ecoli4':None,
-    'glass-0-1-6_vs_2':None,
-    'page-blocks-1-3_vs_4':None,
-    'yeast-1-2-8-9_vs_7':None
-}
-
 n_splits = 5
 n_repeats = 2
 
