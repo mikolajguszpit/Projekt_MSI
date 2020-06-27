@@ -62,7 +62,7 @@ class ADASYN:
             Rhat_i.append(rhat_i)
         Gi = []
         #Wyliczamy liczbę próbek syntetycznych która ma powstać dla każdej próbki mniejszościowej.
-        #Ponownie wyliczamy ją również dla wykluczonych próbek, jednak wyliczenia te nie będą one brane pod uwagę w późniejszych etapach.
+        #Ponownie wyliczamy ją również dla wykluczonych próbek, jednak wyliczenia te nie będą brane pod uwagę w późniejszych etapach.
         for rhat_i in Rhat_i:
             gi = round(rhat_i * G)
             Gi.append(int(gi))
