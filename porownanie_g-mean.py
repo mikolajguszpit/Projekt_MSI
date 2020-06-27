@@ -3,7 +3,7 @@ from ADASYN import ADASYN
 from sklearn.tree import DecisionTreeClassifier
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 from imblearn.under_sampling import RandomUnderSampler
-from strlearn.metrics import geometric_mean_score_1
+from strlearn.metrics import geometric_mean_score_2
 from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.base import clone
 from tabulate import tabulate
@@ -54,7 +54,7 @@ for data_id, dataset in enumerate(dataset):
 
             clf.fit(X_train, y_train)
             y_pred = clf.predict(X[test])
-            scores[preproc_id, data_id, fold_id] = geometric_mean_score_1(y[test], y_pred)
+            scores[preproc_id, data_id, fold_id] = geometric_mean_score_2(y[test], y_pred)
 
 mean_scores = np.mean(scores, axis=2).T
 
