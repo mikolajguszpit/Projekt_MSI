@@ -2,39 +2,43 @@ import numpy as np
 from sklearn import neighbors
 
 class ADASYN:
-    def fit_resample(self, X, y, K=5, beta=1, threshold=1):
-        seed = 997
-        np.random.seed(seed)
-        
+    def __init__(self, seed=997, k=5, beta=1, threshold=1):
+        self.seed = seed
+        self.k = k
+        self.threshold = threshold
+        self.beta = beta
+    def fit_resample(self, X, y):
+        np.random.seed(self.seed)
+
         #Sprawdzanie liczby próbek klasy mniejszzościowej i większościowej
         ms = int(np.sum(y))
         ml = len(y) - ms
 
         clf = neighbors.KNeighborsClassifier()
         clf.fit(X, y)
-        
+
         #Sprawdzanie czy dane są wystarczająco niezbalansowane
         d = np.divide(ms, ml)
-        if d > threshold:
+        if d > self.threshold:
             return print("Niewystarczające niezbalansowanie zbioru danych")
-        
+
         #Obliczanie całkowitej liczby próbek syntetycznych, ktore muszą zostać wygenerowane, aby osiągnąć poziom niezbalansowania beta
-        G = (ml - ms) * beta
-        
+        G = (ml - ms) * self.beta
+
         Ri = []
         Minority_per_xi = []
         Minority_index = []
-        
+
         #Określanie które numerów próbek mniejszościowych w puli wszystkich próbek
         for i in range(len(y)):
             if y[i] == 1:
                 Minority_index.append(i)
-                
-        #Sprawdzanie najbliższych sąsiadów próbek klasy mniejszościowej        
+
+        #Sprawdzanie najbliższych sąsiadów próbek klasy mniejszościowej
         for i in range(len(y)):
             if y[i] == 1:
                 xi = X[i, :].reshape(1, -1)
-                neighbours = clf.kneighbors(xi, n_neighbors=K + 1, return_distance=False)[0]
+                neighbours = clf.kneighbors(xi, n_neighbors=self.k + 1, return_distance=False)[0]
                 neighbours = neighbours[1:]
                 count = 0
                 #Liczenie ile sąsiadów próbki klasy mniejszościowej należy do klasy większościowej
@@ -48,10 +52,10 @@ class ADASYN:
                         minority.append(value)
                 Minority_per_xi.append(minority)
                 #Wyliczanie stopnia niezbalansowania każdego sąsiadztwa wszystkich próbek mniejszościowych (1 - brak sąsiadów mniejszościowych, 0 - wszyscy sąsiedzi są mniejszościowi)
-                Ri.append(count / K)
+                Ri.append(count / self.k)
         Rhat_i = []
         Ri_sum = sum(Ri)
-        #Próbki mniejszościowe, które nie posiadają żadnych sąsiadów klasy mniejszościowej postanowiono zignorować. 
+        #Próbki mniejszościowe, które nie posiadają żadnych sąsiadów klasy mniejszościowej postanowiono zignorować.
         #W związku z tym, postanowiono wykluczyć ich udział w wyliczaniu sumy Ri. Pozwoli to na uzyskanie balansu beta.
         for ri in Ri:
             if ri == 1:
@@ -67,8 +71,8 @@ class ADASYN:
             gi = round(rhat_i * G)
             Gi.append(int(gi))
         syn_data = []
-        
-        #Sprawdzamy wszystkie próbki mniejszościowe. 
+
+        #Sprawdzamy wszystkie próbki mniejszościowe.
         #Dla próbek które mają sąsiadów mniejszościowych (tablica Minority_per_xi nie jest pusta) wykonywana jest generacja próbek syntetycznych.
         #Próbki które nie mają sąsiadów mniejszościowych są ignorowane.
         flag = 0
